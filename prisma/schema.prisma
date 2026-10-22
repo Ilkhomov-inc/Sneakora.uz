@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Gender {
+  MEN
+  WOMEN
+  KIDS
+  UNISEX // shown under both «Мужчинам» and «Женщинам»
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum BannerPlacement {
+  HERO // home page slider
+  PROMO // wide promo block on the home page
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  REFUNDED
+}
+
+enum AdminRole {
+  OWNER
+  MANAGER
+  EDITOR
+}
+
+model Brand {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  name            String
+  logoUrl         String?
+  bannerUrl       String?
+  bannerType      MediaType @default(IMAGE)
+  bannerPosterUrl String?
+  // Vertical media for the brand card on the home page: one video, or several photos shown as a
+  // slideshow. Empty = the banner is used.
+  cardMedia       String[]  @default([])
+  cardPosterUrl   String?
+  titleRu         String?
+  titleUz         String?
+  textRu          String?
+  textUz          String?
+  sortOrder       Int       @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  products        Product[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Product {
+  id            String           @id @default(cuid())
+  slug          String           @unique
+  brandId       String
+  brand         Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  gender        Gender
+  name          String
+  descriptionRu String           @default("")
+  descriptionUz String           @default("")
+  price         Int // UZS
+  salePrice     Int? // UZS, set = product is on sale
+  finalPrice    Int // salePrice ?? price — kept in sync for sorting and price filters
+  isNew         Boolean          @default(false)
+  isFeatured    Boolean          @default(false)
+  isPublished   Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  variants      ProductVariant[]
+
+  @@index([brandId, isPublished])
+  @@index([gender, isPublished])
+  @@index([finalPrice])
+}
+
+model ProductVariant {
+  id          String        @id @default(cuid())
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku         String        @unique
+  colorNameRu String
+  colorNameUz String
+  colorFamily String // filter group, see src/lib/colors.ts
+  colorHex    String        @default("#121212")
+  images      String[]
+  sortOrder   Int           @default(0)
+  sizes       VariantSize[]
+
+  @@index([productId, sortOrder])
+  @@index([colorFamily])
+}
+
+model VariantSize {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  size      String // EU size, see src/lib/sizes.ts
+  stock     Int            @default(0)
+
+  @@unique([variantId, size])
+  @@index([size, stock])
+}
+
+model Banner {
+  id              String          @id @default(cuid())
+  placement       BannerPlacement
+  mediaType       MediaType       @default(IMAGE)
+  mediaUrl        String
+  mediaUrlMobile  String?
+  posterUrl       String?
+  posterUrlMobile String?
+  eyebrowRu       String?
+  eyebrowUz       String?
+  titleRu         String?
+  titleUz         String?
+  textRu          String?
+  textUz          String?
+  ctaLabelRu      String?
+  ctaLabelUz      String?
+  ctaHref         String?
+  sortOrder       Int             @default(0)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([placement, isActive, sortOrder])
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  number        Int           @unique @default(autoincrement())
+  publicToken   String        @unique // unguessable id for the customer's order page
+  status        OrderStatus   @default(NEW)
+  customerName  String
+  phone         String
+  comment       String?
+  locale        String        @default("ru")
+  itemsCount    Int
+  total         Int // UZS
+  channel       String        @default("telegram") // how the customer continues the conversation
+  // Reserved for upcoming features (customer accounts, online payment):
+  customerId    String?
+  paymentMethod String        @default("manual")
+  paymentStatus PaymentStatus @default(UNPAID)
+  adminNote     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         OrderItem[]
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Snapshot of the product at order time; ids are kept without a relation so that
+  // deleting a product never touches order history.
+  productId String?
+  variantId String?
+  sku       String
+  name      String
+  brandName String
+  colorName String
+  size      String
+  image     String?
+  price     Int // unit price, UZS
+  quantity  Int
+
+  @@index([orderId])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// Staff accounts with roles. Not used yet: the admin panel currently signs in with
+// the shared ADMIN_PASSWORD (src/lib/auth/admin.ts).
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         AdminRole @default(MANAGER)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

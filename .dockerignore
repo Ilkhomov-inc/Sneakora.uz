@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.pgdata
+uploads
+src/generated
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.DS_Store
+Dockerfile
+docker-compose.yml
+Caddyfile
